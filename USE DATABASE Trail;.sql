@@ -12,3 +12,11 @@ VALUES (
   );
 
 SELECT * FROM activity
+
+ALTER TABLE team_member
+ADD CONSTRAINT chk_telno CHECK (LENGTH(Telno) = 10)
+
+ALTER TABLE team_member
+ADD CONSTRAINT chk_name CHECK (BINARY name = UPPER(name))
+
+
