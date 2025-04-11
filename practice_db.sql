@@ -61,11 +61,5 @@ INSERT INTO Appointment VALUES('101','Alex Bukenya','BPharm', 0700444444);
 INSERT INTO Appointment VALUES('101','Alex Bukenya','BPharm', 0700444444);
 INSERT INTO Appointment VALUES('101','Alex Bukenya','BPharm', 0700444444);
 
-UPDATE activity
-SET name = 'Jim Jones'
-WHERE ActivityCode = Ao1
 
 
-CREATE VIEW view1
-AS SELECT * FROM Patient
-WHERE Gender = 'M';
