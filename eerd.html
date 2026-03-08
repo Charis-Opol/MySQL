@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HR System EERD</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Syne:wght@400;600;800&display=swap');
+
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --border: #1e2230;
+    --accent1: #4af0c4;
+    --accent2: #5b8fff;
+    --accent3: #f5c542;
+    --accent4: #ff6b8a;
+    --accent5: #b06eff;
+    --text: #e8eaf0;
+    --muted: #5a6070;
+    --entity-bg: #13161f;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--text);
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  #header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    background: linear-gradient(to bottom, #0a0c10ee, transparent);
+    padding: 18px 28px 10px;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    pointer-events: none;
+  }
+
+  #header h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: var(--accent1);
+  }
+
+  #header span {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  #legend {
+    position: fixed;
+    bottom: 18px;
+    right: 18px;
+    z-index: 100;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 10px;
+    line-height: 2;
+    color: var(--muted);
+  }
+
+  #legend div { display: flex; align-items: center; gap: 8px; }
+
+  .leg-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  #canvas-wrap {
+    width: 100vw;
+    height: 100vh;
+    overflow: auto;
+    cursor: grab;
+  }
+
+  #canvas-wrap:active { cursor: grabbing; }
+
+  #canvas {
+    position: relative;
+    width: 2400px;
+    height: 1700px;
+  }
+
+  svg#lines {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  /* Entity cards */
+  .entity {
+    position: absolute;
+    background: var(--entity-bg);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    min-width: 200px;
+    font-size: 11px;
+    transition: box-shadow 0.2s, border-color 0.2s;
+    cursor: default;
+  }
+
+  .entity:hover {
+    z-index: 10;
+    border-color: var(--accent2);
+    box-shadow: 0 0 24px #5b8fff22, 0 8px 32px #00000066;
+  }
+
+  .entity-header {
+    padding: 8px 12px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .entity-header .badge {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 8px;
+    font-weight: 400;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #ffffff14;
+    letter-spacing: 0.08em;
+  }
+
+  .entity-body {
+    padding: 6px 0 6px;
+  }
+
+  .attr {
+    padding: 3px 12px;
+    color: #a0aaba;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1.6;
+  }
+
+  .attr.pk {
+    color: var(--accent3);
+    font-weight: 600;
+  }
+
+  .attr.fk {
+    color: var(--accent5);
+  }
+
+  .attr-icon {
+    font-size: 9px;
+    flex-shrink: 0;
+    width: 14px;
+    text-align: center;
+  }
+
+  .attr-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 10px;
+  }
+
+  /* Color themes per entity group */
+  .theme-core   .entity-header { background: linear-gradient(90deg, #1a2a3a, #1a2640); color: var(--accent2); }
+  .theme-org    .entity-header { background: linear-gradient(90deg, #1a2a1e, #162218); color: var(--accent1); }
+  .theme-hr     .entity-header { background: linear-gradient(90deg, #2a1a2a, #221525); color: var(--accent5); }
+  .theme-ops    .entity-header { background: linear-gradient(90deg, #2a2410, #241e0d); color: var(--accent3); }
+
+  /* Relationship label on SVG lines */
+  .rel-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    fill: var(--muted);
+    letter-spacing: 0.06em;
+  }
+
+  .card-line { fill: none; stroke-width: 1.5; }
+  .card-text { font-family: 'IBM Plex Mono', monospace; font-size: 10px; fill: var(--muted); font-weight: 600; }
+
+  /* recursive arrow */
+  .recursive-arrow { fill: none; stroke: var(--accent4); stroke-width: 1.5; stroke-dasharray: 5 3; }
+
+  #tooltip {
+    position: fixed;
+    background: #1a1d28;
+    border: 1px solid var(--accent2);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 10px;
+    color: var(--text);
+    pointer-events: none;
+    display: none;
+    z-index: 200;
+    max-width: 220px;
+    line-height: 1.7;
+  }
+
+  #instructions {
+    position: fixed;
+    bottom: 18px; left: 18px;
+    z-index: 100;
+    font-size: 9px;
+    color: var(--muted);
+    line-height: 2;
+    letter-spacing: 0.06em;
+  }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>HR System EERD</h1>
+  <span>Enhanced Entity–Relationship Diagram · University HR Information System</span>
+</div>
+
+<div id="tooltip"></div>
+
+<div id="instructions">
+  SCROLL / DRAG to navigate &nbsp;·&nbsp; HOVER entity for details
+</div>
+
+<div id="legend">
+  <div><span class="leg-dot" style="background:#4af0c4"></span> Organisational Hierarchy</div>
+  <div><span class="leg-dot" style="background:#5b8fff"></span> Core Employee Data</div>
+  <div><span class="leg-dot" style="background:#b06eff"></span> HR Records</div>
+  <div><span class="leg-dot" style="background:#f5c542"></span> Operational Tracking</div>
+  <div><span class="leg-dot" style="background:#ff6b8a"></span> Recursive / EER Feature</div>
+</div>
+
+<div id="canvas-wrap">
+  <div id="canvas">
+    <svg id="lines"></svg>
+
+    <!-- ORG HIERARCHY -->
+    <div class="entity theme-org" id="e-division" style="left:140px;top:80px">
+      <div class="entity-header">Divisions <span class="badge">PK division_id</span></div>
+      <div class="entity-body">
+        <div class="attr pk"><span class="attr-icon">🔑</span>division_id</div>
+        <div class="attr-divider"></div>
+        <div class="attr"><span class="attr-icon">·</span>division_name</div>
+        <div class="attr"><span class="attr-icon">·</span>description</div>
+      </div>
+    </div>
+
+    <div class="entity theme-org" id="e-faculty" style="left:140px;top:260px">
+      <div class="entity-header">Faculties <span class="badge">PK faculty_id</span></div>
+      <div class="entity-body">
+        <div class="attr pk"><span class="attr-icon">🔑</span>faculty_id</div>
+        <div class="attr fk"><span class="attr-icon">🔗</span>division_id (FK)</div>
+        <div class="attr-divider"></div>
+        <div class="attr"><span class="attr-icon">·</span>faculty_name</div>
+        <div class="attr"><span class="attr-icon">·</span>description</div>
+      </div>
+    </div>
+
+    <div class="entity theme-org" id="e-dept" style="left:140px;top:450px">
+      <div class="entity-header">Departments <span class="badge">PK department_id</span></div>
+      <div class="entity-body">
+        <div class="attr pk"><span class="attr-icon">🔑</span>department_id</div>
+        <div class="attr fk"><span class="attr-icon">🔗</span>faculty_id (FK)</div>
+        <div class="attr-divider"></div>
+        <div class="attr"><span class="attr-icon">·</span>department_name</div>
+        <div class="attr"><span class="attr-icon">·</span>office_location</div>
+      </div>
+    </div>
+
+    <!-- CENTRAL EMPLOYEE -->
+    <div class="entity theme-core" id="e-employee" style="left:560px;top:420px;min-width:240px">
+      <div class="entity-header">Employees <span class="badge">PK employee_id</span></div>
+      <div class="entity-body">
+        <div class="attr pk"><span class="attr-icon">🔑</span>employee_id</div>
+        <div class="attr fk"><span class="attr-icon">🔗</span>biodata_id (FK)</div>
+        <div class="attr fk"><span class="attr-icon">🔗</span>department_id (FK)</div>
+        <div class="attr fk"><span class="attr-icon">🔗</span>position_id (FK)</div>
+        <div class="attr fk"><span class="attr-icon">🔗</span>employment_type_id (FK)</div>
+        <div class="attr fk" style="color:#ff6b8a"><span class="attr-icon">🔁</span>supervisor_id (FK→self)</div>
+        <div class="attr-divider"></div>
+        <div class="attr"><span class="attr-icon">·</span>hire_date</div>
+        <div class="attr"><span class="attr-icon">·</span>employment_status</div>
+        <div class="attr"><span class="attr-icon">·</span>work_email</div>
+      </div>
+    </div>
+
+    <!-- BIODATA -->
+    <div class="entity theme-core" id="e-biodata" style="left:560px;top:80px;min-width:230px">
+      <div class="entity-header">BioData <span class="badge">PK biodata_id</span></div>
+      <div class="entity-body">
+        <div class="attr pk"><span class="attr-icon">🔑</span>biodata_id</div>
+        <div class="attr-divider"></div>
+        <div class="attr"><span class="attr-icon">·</span>first_name · last_name</div>
+        <div class="attr"><span class="attr-icon">·</span>date_of_birth · gender</div>
+        <div class="attr"><span class="attr-icon">·</span>national_id</div>
+        <div class="attr"><span class="attr-icon">·</span>village · home_residence</div>
+        <div class="attr"><span class="attr-icon">·</span>current_residence</div>
+        <div class="attr"><span class="attr-icon">·</span>postal_address</div>
+        <div class="attr"><span class="attr-icon">·</span>phone_number · email</div>
+        <div class="attr"><span class="attr-icon">·</span>spouse_name</div>
+        <div class="attr"><span class="attr-icon">·</span>number_of_children</div>
+        <div class="attr"><span class="attr-icon">·</span>next_of_kin_name</div>
+        <div class="attr"><span class="attr-icon">·</span>next_of_kin_relationship</div>
+        <div class="attr"><span class="attr-icon">·</span>next_of_kin_phone</div>
+      </div>
+    </div>
+
+    <!-- POSITION + EMPTYPE -->
+    <div class="entity theme-core" id="e-position" style="left:560px;top:720px">
+      <div class="entity-header">Positions <span class="badge">PK position_id</span></div>
+      <div class="entity-body">
+        <div class="attr pk"><span class="attr-icon">🔑</span>position_id</div>
+        <div class="attr-divider"></div>
+        <div class="attr"><span class="attr-icon">·</span>position_title</div>
+        <div class="attr"><span class="attr-icon">·</span>description</div>
+        <div class="attr"><span class="attr-icon">·</span>rank_level</div>
+      </div>
+    </div>
+
+    <div class="entity theme-core" id="e-emptype" style="left:140px;top:720px">
+      <div class="entity-header">EmploymentType <span class="badge">PK employment_type_id</span></div>
+      <div class="entity-body">
+        <div class="attr pk"><span class="attr-icon">🔑</span>employment_type_id</div>
+        <div class="attr-divider"></div>
+        <div class="attr"><span class="attr-icon">·</span>type_name</div>
+        <div class="attr"><span class="attr-icon">·</span>description</div>
+      </div>
+    </div>
+
+    <!-- HR RECORDS (right side) -->
+    <div class="entity theme-hr" id="e-qual" style="left:1020px;top:80px">
+      <div class="entity-header">Qualifications <span class="badge">PK qualification_id</span></div>
+      <div class="entity-body">
+        <div class="attr pk"><span class="attr-icon">🔑</span>qualification_id</div>
+        <div class="attr fk"><span class="attr-icon">🔗</span>employee_id (FK)</div>
+        <div class="attr-divider"></div>
+        <div class="attr"><span class="attr-icon">·</span>qualification_level</div>
+        <div class="attr"><span class="attr-icon">·</span>field_of_study</div>
+        <div class="attr"><span class="attr-icon">·</span>institution_name</div>
+        <div class="attr"><span class="attr-icon">·</span>graduation_year</div>
+        <div class="attr"><span class="attr-icon">·</span>certificate_number</div>
+      </div>
+    </div>
+
+    <div class="entity theme-hr" id="e-financial" style="left:1020px;top:310px">
+      <div class="entity-header">FinancialData <span class="badge">PK financial_id</span></div>
+      <div class="entity-body">
+        <div class="attr pk"><span class="attr-icon">🔑</span>financial_id</div>
+        <div class="attr fk"><span class="attr-icon">🔗</span>employee_id (FK)</div>
+        <div class="attr-divider"></div>
+        <div class="attr"><span class="attr-icon">·</span>bank_name · bank_branch</div>
+        <div class="attr"><span class="attr-icon">·</span>account_number</div>
+        <div class="attr"><span class="attr-icon">·</span>nssf_number</div>
+        <div class="attr"><span class="attr-icon">·</span>salary</div>
+      </div>
+    </div>
+
+    <div class="entity theme-hr" id="e-probation" style="left:1020px;top:500px">
+      <div class="entity-header">Probation <span class="badge">PK probation_id</span></div>
+      <div class="entity-body">
+        <div class="attr pk"><span class="attr-icon">🔑</span>probation_id</div>
+        <div class="attr fk"><span class="attr-icon">🔗</span>employee_id (FK)</div>
+        <div class="attr-divider"></div>
+        <div class="attr"><span class="attr-icon">·</span>start_date · end_date</div>
+        <div class="attr"><span class="attr-icon">·</span>extension_count</div>
+        <div class="attr"><span class="attr-icon">·</span>evaluation_score</div>
+        <div class="attr"><span class="attr-icon">·</span>probation_status</div>
+      </div>
+    </div>
+
+    <!-- OPERATIONAL (far right) -->
+    <div class="entity theme-ops" id="e-leave" style="left:1380px;top:80px">
+      <div class="entity-header">Leave <span class="badge">PK leave_id</span></div>
+      <div class="entity-body">
+        <div class="attr pk"><span class="attr-icon">🔑</span>leave_id</div>
+        <div class="attr fk"><span class="attr-icon">🔗</span>employee_id (FK)</div>
+        <div class="attr fk"><span class="attr-icon">🔗</span>approved_by (FK→Employee)</div>
+        <div class="attr-divider"></div>
+        <div class="attr"><span class="attr-icon">·</span>leave_type</div>
+        <div class="attr"><span class="attr-icon">·</span>start_date · end_date</div>
+        <div class="attr"><span class="attr-icon">·</span>reason · status</div>
+        <div class="attr"><span class="attr-icon">·</span>request_date</div>
+      </div>
+    </div>
+
+    <div class="entity theme-ops" id="e-perf" style="left:1380px;top:360px;min-width:230px">
+      <div class="entity-header">PerformanceEvaluations <span class="badge">PK evaluation_id</span></div>
+      <div class="entity-body">
+        <div class="attr pk"><span class="attr-icon">🔑</span>evaluation_id</div>
+        <div class="attr fk"><span class="attr-icon">🔗</span>employee_id (FK)</div>
+        <div class="attr fk"><span class="attr-icon">🔗</span>evaluator_id (FK→Employee)</div>
+        <div class="attr-divider"></div>
+        <div class="attr"><span class="attr-icon">·</span>evaluation_date</div>
+        <div class="attr"><span class="attr-icon">·</span>execution_of_duties_score</div>
+        <div class="attr"><span class="attr-icon">·</span>innovation_score</div>
+        <div class="attr"><span class="attr-icon">·</span>teamwork_score</div>
+        <div class="attr"><span class="attr-icon">·</span>christian_values_score</div>
+        <div class="attr"><span class="attr-icon">·</span>service_delivery_score</div>
+        <div class="attr"><span class="attr-icon">·</span>total_score · evaluation_result</div>
+      </div>
+    </div>
+
+    <div class="entity theme-ops" id="e-tasks" style="left:1380px;top:660px">
+      <div class="entity-header">Tasks <span class="badge">PK task_id</span></div>
+      <div class="entity-body">
+        <div class="attr pk"><span class="attr-icon">🔑</span>task_id</div>
+        <div class="attr fk"><span class="attr-icon">🔗</span>employee_id (FK)</div>
+        <div class="attr-divider"></div>
+        <div class="attr"><span class="attr-icon">·</span>task_description</div>
+        <div class="attr"><span class="attr-icon">·</span>task_date · task_status</div>
+        <div class="attr"><span class="attr-icon">·</span>supervisor_comment</div>
+      </div>
+    </div>
+
+  </div><!-- #canvas -->
+</div><!-- #canvas-wrap -->
+
+<script>
+// ---- Draw SVG lines ----
+const svg = document.getElementById('lines');
+const ns = 'http://www.w3.org/2000/svg';
+
+function rect(id) {
+  const el = document.getElementById(id);
+  const l = parseInt(el.style.left);
+  const t = parseInt(el.style.top);
+  return { l, t, r: l + el.offsetWidth, b: t + el.offsetHeight,
+           cx: l + el.offsetWidth/2, cy: t + el.offsetHeight/2 };
+}
+
+function midpoint(x1,y1,x2,y2){ return [(x1+x2)/2,(y1+y2)/2]; }
+
+function addLine(x1,y1,x2,y2,color,dash,label,card1,card2) {
+  const path = document.createElementNS(ns,'path');
+  const mx = (x1+x2)/2, my = (y1+y2)/2;
+  path.setAttribute('d', `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`);
+  path.setAttribute('class','card-line');
+  path.setAttribute('stroke', color);
+  if(dash) path.setAttribute('stroke-dasharray','6 3');
+  svg.appendChild(path);
+
+  if(label){
+    const t = document.createElementNS(ns,'text');
+    t.setAttribute('x', mx); t.setAttribute('y', my - 6);
+    t.setAttribute('text-anchor','middle');
+    t.setAttribute('class','rel-label');
+    t.textContent = label;
+    svg.appendChild(t);
+  }
+
+  function addCard(x,y,txt){
+    const t = document.createElementNS(ns,'text');
+    t.setAttribute('x',x); t.setAttribute('y',y);
+    t.setAttribute('text-anchor','middle');
+    t.setAttribute('class','card-text');
+    t.setAttribute('fill', color);
+    t.textContent = txt;
+    svg.appendChild(t);
+  }
+
+  if(card1) addCard(x1+6, y1+14, card1);
+  if(card2) addCard(x2+6, y2-6, card2);
+}
+
+function drawArrow(x1,y1,x2,y2,color){
+  const m = document.createElementNS(ns,'marker');
+  const id = 'arr'+Math.random().toString(36).slice(2,6);
+  m.setAttribute('id',id);
+  m.setAttribute('markerWidth','8'); m.setAttribute('markerHeight','6');
+  m.setAttribute('refX','8'); m.setAttribute('refY','3');
+  m.setAttribute('orient','auto');
+  const poly = document.createElementNS(ns,'polygon');
+  poly.setAttribute('points','0 0, 8 3, 0 6');
+  poly.setAttribute('fill',color);
+  m.appendChild(poly);
+  svg.querySelector('defs') || svg.insertBefore(document.createElementNS(ns,'defs'),svg.firstChild);
+  svg.querySelector('defs').appendChild(m);
+
+  const path = document.createElementNS(ns,'path');
+  path.setAttribute('d',`M${x1},${y1} L${x2},${y2}`);
+  path.setAttribute('fill','none');
+  path.setAttribute('stroke',color);
+  path.setAttribute('stroke-width','1.5');
+  path.setAttribute('marker-end',`url(#${id})`);
+  svg.appendChild(path);
+}
+
+window.addEventListener('load', () => {
+  const C1 = '#4af0c4', C2 = '#5b8fff', C3 = '#b06eff', C4 = '#f5c542', C5 = '#ff6b8a';
+
+  // Org hierarchy
+  const div = rect('e-division'), fac = rect('e-faculty'), dep = rect('e-dept'), emp = rect('e-employee');
+  addLine(div.cx, div.b, fac.cx, fac.t, C1, false, '1 : M', '1', 'M');
+  addLine(fac.cx, fac.b, dep.cx, dep.t, C1, false, '1 : M', '1', 'M');
+  addLine(dep.r, dep.cy, emp.l, emp.cy, C1, false, '1 : M', '1', 'M');
+
+  // BioData 1:1 Employee
+  const bio = rect('e-biodata');
+  addLine(bio.cx, bio.b, emp.cx, emp.t, C2, false, '1 : 1', '1', '1');
+
+  // Position + EmpType
+  const pos = rect('e-position'), et = rect('e-emptype');
+  addLine(emp.cx, emp.b, pos.cx, pos.t, C2, false, 'M : 1', 'M', '1');
+  addLine(et.r, et.cy, emp.l, emp.cy+40, C2, false, 'M : 1', 'M', '1');
+
+  // HR records
+  const qual = rect('e-qual'), fin = rect('e-financial'), prob = rect('e-probation');
+  addLine(emp.r, emp.cy-40, qual.l, qual.cy, C3, false, '1 : M', '1', 'M');
+  addLine(emp.r, emp.cy, fin.l, fin.cy, C3, false, '1 : 1', '1', '1');
+  addLine(emp.r, emp.cy+30, prob.l, prob.cy, C3, false, '1 : 1', '1', '1');
+
+  // Ops records
+  const lv = rect('e-leave'), pf = rect('e-perf'), tk = rect('e-tasks');
+  addLine(fin.r, fin.cy, lv.l, lv.cy, C4, false, '1 : M', '1', 'M');
+  addLine(prob.r, prob.cy, pf.l, pf.cy, C4, false, '1 : M', '1', 'M');
+  addLine(emp.r, emp.b, tk.l, tk.cy, C4, false, '1 : M', '1', 'M');
+
+  // Leave approved_by (Employee → Leave, dashed)
+  addLine(emp.r, emp.cy-20, lv.l, lv.cy+30, C5, true, 'approved_by', '', '');
+
+  // Perf evaluator (Employee → Perf, dashed)
+  addLine(emp.r, emp.cy+10, pf.l, pf.cy+30, C5, true, 'evaluator', '', '');
+
+  // RECURSIVE: supervisor_id (EER feature)
+  // Draw a self-loop on Employee
+  const ex = emp.l + emp.cx - emp.l, ey = emp.t;
+  const loopX = emp.l - 60;
+  const p = document.createElementNS(ns,'path');
+  const sx = emp.l, sy = emp.cy - 20;
+  const ex2 = emp.l, ey2 = emp.cy + 20;
+  p.setAttribute('d', `M${sx},${sy} C${loopX},${sy} ${loopX},${ey2} ${ex2},${ey2}`);
+  p.setAttribute('fill','none');
+  p.setAttribute('stroke',C5);
+  p.setAttribute('stroke-width','2');
+  p.setAttribute('stroke-dasharray','5 3');
+  svg.appendChild(p);
+
+  // Arrow at end of recursive loop
+  drawArrow(loopX+14, ey2-2, ex2+1, ey2, C5);
+
+  // Label
+  const lt = document.createElementNS(ns,'text');
+  lt.setAttribute('x', loopX - 8);
+  lt.setAttribute('y', (sy+ey2)/2);
+  lt.setAttribute('text-anchor','end');
+  lt.setAttribute('class','rel-label');
+  lt.setAttribute('fill',C5);
+  lt.textContent = 'supervises (1:M)';
+  svg.appendChild(lt);
+
+  const lt2 = document.createElementNS(ns,'text');
+  lt2.setAttribute('x', loopX - 8);
+  lt2.setAttribute('y', (sy+ey2)/2 + 14);
+  lt2.setAttribute('text-anchor','end');
+  lt2.setAttribute('class','rel-label');
+  lt2.setAttribute('fill',C5);
+  lt2.textContent = '◀ EER Recursive';
+  svg.appendChild(lt2);
+});
+
+// ---- Drag to pan ----
+const wrap = document.getElementById('canvas-wrap');
+let dragging = false, sx, sy, sl, st;
+wrap.addEventListener('mousedown', e => {
+  dragging = true; sx = e.clientX; sy = e.clientY;
+  sl = wrap.scrollLeft; st = wrap.scrollTop;
+});
+window.addEventListener('mousemove', e => {
+  if(!dragging) return;
+  wrap.scrollLeft = sl - (e.clientX - sx);
+  wrap.scrollTop = st - (e.clientY - sy);
+});
+window.addEventListener('mouseup', () => dragging = false);
+
+// ---- Tooltip ----
+const tips = {
+  'e-division': 'Top of org hierarchy.\nHas many Faculties.',
+  'e-faculty': 'Belongs to a Division.\nHas many Departments.',
+  'e-dept': 'Belongs to a Faculty.\nHas many Employees.',
+  'e-employee': 'Central entity.\nLinks all records.\nRecursive supervisor_id (EER).',
+  'e-biodata': '1:1 with Employee.\nPersonal & contact info.',
+  'e-position': 'Lookup table for job titles.',
+  'e-emptype': 'Lookup: Full-time, Part-time…',
+  'e-qual': '1:M — Employee has many qualifications.',
+  'e-financial': '1:1 — One financial record per employee.',
+  'e-probation': '1:1 — Optional probation period.',
+  'e-leave': '1:M — Leave requests.\napproved_by → Employee (FK).',
+  'e-perf': '1:M — Performance evaluations.\nevaluator_id → Employee (FK).',
+  'e-tasks': '1:M — Daily task logs.',
+};
+
+const tooltip = document.getElementById('tooltip');
+document.querySelectorAll('.entity').forEach(el => {
+  el.addEventListener('mouseenter', e => {
+    const key = el.id;
+    if(tips[key]){
+      tooltip.style.display = 'block';
+      tooltip.innerHTML = tips[key].replace(/\n/g,'<br>');
+    }
+  });
+  el.addEventListener('mousemove', e => {
+    tooltip.style.left = (e.clientX+14)+'px';
+    tooltip.style.top = (e.clientY-10)+'px';
+  });
+  el.addEventListener('mouseleave', () => { tooltip.style.display='none'; });
+});
+
+// Scroll to center on load
+window.addEventListener('load', () => {
+  wrap.scrollLeft = 0;
+  wrap.scrollTop = 0;
+});
+</script>
+</body>
+</html>
