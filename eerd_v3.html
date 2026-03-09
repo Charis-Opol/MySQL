@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UCU HR System EERD — v4</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Syne:wght@400;600;800&display=swap');
+
+  :root {
+    --bg:        #080a0f;
+    --surface:   #0f1118;
+    --border:    #252a3a;
+    --header-bg: #131726;
+    --text:      #cdd5e0;
+    --muted:     #4e5a6e;
+    --pk:        #e8c84a;
+    --fk:        #8b7fe8;
+    --inh:       #5ec9aa;
+    --new-f:     #e8894a;
+    --upd-f:     #5ec9aa;
+    --line:      #3a4258;
+    --eer-blue:  #5b8fff;
+    --accent:    #5b8fff;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--text);
+    overflow: hidden;
+    width: 100vw; height: 100vh;
+  }
+
+  /* ── HEADER ─────────────────────────────────────────────── */
+  #header {
+    position: fixed; top:0; left:0; right:0; z-index:200;
+    background: linear-gradient(to bottom, #080a0ff5 70%, transparent);
+    padding: 14px 24px 8px;
+    display: flex; align-items: center; gap: 16px;
+    pointer-events: none;
+  }
+  #header h1 {
+    font-family: 'Syne', sans-serif; font-size: 19px; font-weight: 800;
+    color: var(--text); letter-spacing: .04em;
+  }
+  #header .sub { font-size: 10px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+  #header .vbadge {
+    margin-left: auto; padding: 3px 10px; border-radius: 20px;
+    background: #5b8fff18; border: 1px solid #5b8fff55;
+    color: var(--eer-blue); font-size: 9px; letter-spacing: .08em;
+    pointer-events: all;
+  }
+
+  /* ── LEGEND ─────────────────────────────────────────────── */
+  #legend {
+    position: fixed; bottom: 16px; right: 16px; z-index: 200;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 16px;
+    font-size: 10px; line-height: 2.2; color: var(--muted); min-width: 220px;
+  }
+  #legend .ltitle {
+    font-family: 'Syne', sans-serif; font-size: 10px; color: var(--text);
+    font-weight: 700; margin-bottom: 4px; letter-spacing: .06em;
+  }
+  #legend .lrow { display: flex; align-items: center; gap: 10px; }
+  .lsample { flex-shrink: 0; }
+
+  /* ── EER PANEL ──────────────────────────────────────────── */
+  #eer-panel {
+    position: fixed; top: 56px; right: 16px; z-index: 200;
+    background: var(--surface); border: 1px solid #5b8fff44;
+    border-radius: 10px; padding: 10px 14px;
+    font-size: 9px; line-height: 1.9; color: var(--muted); max-width: 240px;
+  }
+  #eer-panel .ep-title {
+    font-family: 'Syne', sans-serif; font-size: 10px; color: var(--eer-blue);
+    font-weight: 700; margin-bottom: 6px; letter-spacing: .06em;
+  }
+  .eer-item { display: flex; gap: 6px; align-items: flex-start; margin-top: 3px; }
+  .eer-icon { flex-shrink:0; width:16px; text-align:center; color:var(--eer-blue); font-weight:700; }
+
+  #instructions {
+    position: fixed; bottom: 16px; left: 16px; z-index: 200;
+    font-size: 9px; color: var(--muted); line-height: 2.3; letter-spacing: .06em;
+  }
+
+  /* ── CANVAS ─────────────────────────────────────────────── */
+  #canvas-wrap { width:100vw; height:100vh; overflow:auto; cursor:grab; }
+  #canvas-wrap:active { cursor:grabbing; }
+  #canvas { position:relative; width:3800px; height:2800px; }
+  svg#lines { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
+
+  /* ── ENTITY BASE ────────────────────────────────────────── */
+  .entity {
+    position: absolute;
+    background: var(--header-bg);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    min-width: 220px;
+    font-size: 10.5px;
+    cursor: default;
+    transition: box-shadow .2s, border-color .18s, transform .14s;
+  }
+  .entity:hover {
+    z-index: 50;
+    border-color: #5b8fff88;
+    box-shadow: 0 0 22px #5b8fff18, 0 6px 28px #00000066;
+    transform: translateY(-2px);
+  }
+
+  /* Supertype — double border effect */
+  .entity.supertype {
+    border: 2px solid var(--border);
+    box-shadow: 0 0 0 4px var(--bg), 0 0 0 6px var(--border);
+  }
+  .entity.supertype:hover {
+    border-color: #5b8fff88;
+    box-shadow: 0 0 0 4px var(--bg), 0 0 0 6px #5b8fff88, 0 0 22px #5b8fff18;
+  }
+
+  /* Subtype — dashed border */
+  .entity.subtype {
+    border: 2px dashed var(--border);
+    background: #0c0f1a;
+  }
+  .entity.subtype:hover {
+    border-color: #5b8fff66;
+  }
+
+  /* ── ENTITY HEADER ──────────────────────────────────────── */
+  .entity-header {
+    padding: 8px 12px;
+    background: #131726;
+    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 11.5px;
+    letter-spacing: .04em;
+    border-bottom: 1px solid var(--border);
+    border-radius: 6px 6px 0 0;
+    color: var(--text);
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  }
+  .entity.supertype .entity-header { background: #131d2e; }
+  .entity.subtype   .entity-header { background: #0d1020; }
+
+  .badge {
+    font-family: 'IBM Plex Mono', monospace; font-size: 8px; font-weight: 400;
+    padding: 2px 6px; border-radius: 4px; background: #ffffff0d;
+    color: var(--muted); letter-spacing: .08em;
+  }
+  .eer-tag {
+    font-family: 'IBM Plex Mono', monospace; font-size: 8px; font-weight: 600;
+    padding: 2px 7px; border-radius: 4px; letter-spacing: .07em; margin-left: auto;
+    background: #5b8fff22; color: var(--eer-blue);
+  }
+
+  /* ── ATTRIBUTES ─────────────────────────────────────────── */
+  .entity-body { padding: 5px 0 7px; }
+
+  .attr {
+    padding: 3px 12px; color: #7a8a9e; font-size: 10px;
+    display: flex; align-items: flex-start; gap: 6px; line-height: 1.6;
+  }
+  .attr.pk  { color: var(--pk);   font-weight: 600; }
+  .attr.fk  { color: var(--fk); }
+  .attr.nf  { color: var(--new-f); }
+  .attr.uf  { color: var(--upd-f); }
+  .attr.inh { color: var(--inh); font-style: italic; }
+
+  .attr-icon { font-size: 9px; flex-shrink: 0; width: 14px; text-align: center; padding-top: 1px; }
+  .attr-divider { height: 1px; background: var(--border); margin: 4px 10px; }
+  .attr-section { padding: 2px 12px 1px; font-size: 8px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; margin-top: 2px; }
+  .attr-eer     { padding: 2px 12px 1px; font-size: 8px; color: #5b8fff99; letter-spacing: .05em; margin-top: 2px; font-style: italic; }
+
+  /* ── SVG ────────────────────────────────────────────────── */
+  .rel-label     { font-family:'IBM Plex Mono',monospace; font-size:9px;  fill:#3d4a60; letter-spacing:.05em; }
+  .card-text     { font-family:'IBM Plex Mono',monospace; font-size:11px; fill:#5a6a84; font-weight:700; }
+  .eer-circ-lbl  { font-family:'Syne',sans-serif;         font-size:10px; fill:#5b8fff; font-weight:800; }
+
+  /* ── TOOLTIP ────────────────────────────────────────────── */
+  #tooltip {
+    position: fixed; background: #0f1420; border: 1px solid #2a3450;
+    border-radius: 8px; padding: 10px 14px; font-size: 10px; color: var(--text);
+    pointer-events: none; display: none; z-index: 500;
+    max-width: 320px; line-height: 1.8; box-shadow: 0 8px 32px #00000099;
+  }
+  .tt-title { font-family:'Syne',sans-serif; font-size:11px; font-weight:700; margin-bottom:5px; color:var(--text); }
+  .tt-eer   { color: var(--eer-blue); font-size:9px; font-weight:600; margin-bottom:4px; }
+  .tt-rule  { color:#4e5a6e; font-size:9px; margin-top:6px; border-top:1px solid #1f2937; padding-top:5px; }
+  .tt-new   { color:var(--new-f); font-size:9px; font-weight:600; margin-bottom:4px; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>UCU HR System EERD</h1>
+  <span class="sub">Enhanced Entity–Relationship Diagram · Uganda Christian University · HR Manual 2024</span>
+  <span class="vbadge">v4.0 — EER · Uniform</span>
+</div>
+
+<div id="tooltip"></div>
+
+<div id="instructions">
+  SCROLL / DRAG to navigate &nbsp;·&nbsp; HOVER any entity for details<br>
+  ══ Double-line = Total participation &nbsp;·&nbsp; ── Single-line = Partial<br>
+  ▣ Double-outline = Supertype &nbsp;·&nbsp; ⬚ Dashed border = Subtype
+</div>
+
+<!-- ── LEGEND ──────────────────────────────────────────────── -->
+<div id="legend">
+  <div class="ltitle">NOTATION</div>
+  <div class="lrow">
+    <svg class="lsample" width="32" height="14">
+      <line x1="1" y1="5"  x2="31" y2="5"  stroke="#3a4258" stroke-width="1.5"/>
+      <line x1="1" y1="9"  x2="31" y2="9"  stroke="#3a4258" stroke-width="1.5"/>
+    </svg>
+    Total participation (double)
+  </div>
+  <div class="lrow">
+    <svg class="lsample" width="32" height="14">
+      <line x1="1" y1="7"  x2="31" y2="7"  stroke="#3a4258" stroke-width="1.5"/>
+    </svg>
+    Partial participation (single)
+  </div>
+  <div class="lrow">
+    <svg class="lsample" width="32" height="14">
+      <line x1="1" y1="7" x2="31" y2="7" stroke="#5b8fff" stroke-width="1.5" stroke-dasharray="5 3"/>
+    </svg>
+    Role FK / Trigger
+  </div>
+  <div class="lrow">
+    <svg class="lsample" width="32" height="14">
+      <circle cx="16" cy="7" r="5" fill="none" stroke="#5b8fff" stroke-width="1.5"/>
+      <text x="16" y="10" text-anchor="middle" font-size="6" fill="#5b8fff" font-family="Syne">d</text>
+    </svg>
+    Specialization circle (d = disjoint)
+  </div>
+  <div class="lrow" style="margin-top:6px">
+    <span style="display:inline-block;width:14px;height:14px;border:2px solid #3a4258;outline:3px solid #3a4258;outline-offset:2px;border-radius:2px;flex-shrink:0"></span>
+    Supertype entity
+  </div>
+  <div class="lrow">
+    <span style="display:inline-block;width:14px;height:14px;border:2px dashed #3a4258;border-radius:2px;flex-shrink:0"></span>
+    Subtype entity
+  </div>
+  <div class="lrow" style="margin-top:4px;font-size:9px">
+    <span style="color:var(--pk)">■</span>&nbsp;PK &nbsp;
+    <span style="color:var(--fk)">■</span>&nbsp;FK &nbsp;
+    <span style="color:var(--inh)">■</span>&nbsp;Inherited &nbsp;
+    <span style="color:var(--new-f)">■</span>&nbsp;New field
+  </div>
+</div>
+
+<!-- ── EER PANEL ────────────────────────────────────────────── -->
+<div id="eer-panel">
+  <div class="ep-title">EER SPECIALIZATIONS</div>
+  <div class="eer-item"><span class="eer-icon">①</span><span>Employee<br>→ AcademicEmployee / AdministrativeEmployee<br><em style="color:#3de8b8">Disjoint · Total</em></span></div>
+  <div class="eer-item"><span class="eer-icon">②</span><span>Leave<br>→ AnnualLeave / SickLeave / Maternity / Sabbatical<br><em style="color:#3de8b8">Disjoint · Total</em></span></div>
+  <div class="eer-item"><span class="eer-icon">③</span><span>SeparationRecord<br>→ VoluntarySeparation / InvoluntarySeparation<br><em style="color:#3de8b8">Disjoint · Total</em></span></div>
+  <div class="eer-item"><span class="eer-icon">④</span><span>Employee.supervisor_id<br>Unary recursive 1:M<br><em style="color:#ff5f87">EER self-referencing</em></span></div>
+  <div style="margin-top:8px;padding-top:6px;border-top:1px solid #1c2030;font-size:8px;color:#3d4a60">
+    All specializations are disjoint and total.<br>Subtypes inherit all supertype attributes.
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     CANVAS
+════════════════════════════════════════════════════════════ -->
+<div id="canvas-wrap">
+<div id="canvas">
+<svg id="lines"></svg>
+
+<!-- ══ ROW 1: ORG HIERARCHY (top-left) ══════════════════════
+     Division → Faculty → Department flow, left column
+     x: 80 → 80 → 80   (vertical stack)
+════════════════════════════════════════════════════════════ -->
+
+<div class="entity" id="e-division" style="left:80px;top:180px;min-width:230px">
+  <div class="entity-header">Division <span class="badge">PK division_id</span></div>
+  <div class="entity-body">
+    <div class="attr pk"><span class="attr-icon">🔑</span>division_id</div>
+    <div class="attr-divider"></div>
+    <div class="attr"><span class="attr-icon">·</span>division_name</div>
+    <div class="attr nf"><span class="attr-icon">★</span>division_type [VC / ACADEMIC / FINANCE]</div>
+    <div class="attr"><span class="attr-icon">·</span>description</div>
+    <div class="attr-section">BR-ORG-04: exactly 3 divisions</div>
+  </div>
+</div>
+
+<div class="entity" id="e-faculty" style="left:80px;top:420px;min-width:230px">
+  <div class="entity-header">Faculty <span class="badge">PK faculty_id</span></div>
+  <div class="entity-body">
+    <div class="attr pk"><span class="attr-icon">🔑</span>faculty_id</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>division_id (FK)</div>
+    <div class="attr-divider"></div>
+    <div class="attr"><span class="attr-icon">·</span>faculty_name</div>
+    <div class="attr nf"><span class="attr-icon">★</span>faculty_type [FACULTY/SCHOOL/INSTITUTE/DIRECTORATE]</div>
+    <div class="attr-section">BR-ORG-01: FK NOT NULL · total in Division</div>
+  </div>
+</div>
+
+<div class="entity" id="e-dept" style="left:80px;top:660px;min-width:230px">
+  <div class="entity-header">Department <span class="badge">PK department_id</span></div>
+  <div class="entity-body">
+    <div class="attr pk"><span class="attr-icon">🔑</span>department_id</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>faculty_id (FK)</div>
+    <div class="attr-divider"></div>
+    <div class="attr"><span class="attr-icon">·</span>department_name</div>
+    <div class="attr"><span class="attr-icon">·</span>office_location</div>
+    <div class="attr-section">BR-ORG-02: FK NOT NULL · BR-ORG-03: employee assigned here</div>
+  </div>
+</div>
+
+<!-- ══ CENTRE: EMPLOYEE SUPERTYPE ═══════════════════════════
+     x: 530   y: 420  (horizontally centred)
+════════════════════════════════════════════════════════════ -->
+
+<div class="entity supertype" id="e-employee" style="left:530px;top:360px;min-width:275px">
+  <div class="entity-header">Employee <span class="badge">PK employee_id</span><span class="eer-tag">SUPERTYPE ①</span></div>
+  <div class="entity-body">
+    <div class="attr pk"><span class="attr-icon">🔑</span>employee_id</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>biodata_id (FK)</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>department_id (FK)</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>position_id (FK)</div>
+    <div class="attr fk" style="color:#ff5f87"><span class="attr-icon">🔁</span>supervisor_id (FK → self) [Unary ④]</div>
+    <div class="attr-divider"></div>
+    <div class="attr"><span class="attr-icon">·</span>hire_date · employment_status · work_email</div>
+    <div class="attr nf"><span class="attr-icon">★</span>campus [MUKONO/ARUA/KAMPALA/MBALE/KABALE]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>employee_category [FULL_TIME/PART_TIME/SHORT_TERM/…]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>contract_start_date · contract_end_date</div>
+    <div class="attr nf"><span class="attr-icon">★</span>retirement_date [age 65, max 75 — BR-EMP-05]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>christian_commitment_affirmed (BOOL)</div>
+    <div class="attr nf"><span class="attr-icon">★</span>kra_form_due_date [hire_date + 28 days]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>post_retirement (BOOL)</div>
+    <div class="attr-eer">① Disjoint, Total: {AcademicEmployee, AdministrativeEmployee}</div>
+    <div class="attr-section">BR-EMP-04 · BR-EMP-07 (unary) · BR-EMP-09</div>
+  </div>
+</div>
+
+<!-- ══ BIODATA (top centre) ══════════════════════════════════ -->
+
+<div class="entity" id="e-biodata" style="left:530px;top:90px;min-width:250px">
+  <div class="entity-header">BioData <span class="badge">PK biodata_id</span></div>
+  <div class="entity-body">
+    <div class="attr pk"><span class="attr-icon">🔑</span>biodata_id</div>
+    <div class="attr-divider"></div>
+    <div class="attr"><span class="attr-icon">·</span>first_name · last_name · date_of_birth · gender</div>
+    <div class="attr"><span class="attr-icon">·</span>national_id · phone_number · email</div>
+    <div class="attr"><span class="attr-icon">·</span>village · home_residence · current_residence</div>
+    <div class="attr"><span class="attr-icon">·</span>spouse_name · number_of_children</div>
+    <div class="attr"><span class="attr-icon">·</span>next_of_kin_name · relationship · phone</div>
+    <div class="attr nf"><span class="attr-icon">★</span>family_disclosure_note</div>
+    <div class="attr nf"><span class="attr-icon">★</span>disability_flag (BOOLEAN)</div>
+    <div class="attr-section">BR-EMP-10: disability not a bar · BR-EMP-11: nepotism disclosure</div>
+    <div class="attr-eer">Total participation both sides (1:1 mandatory)</div>
+  </div>
+</div>
+
+<!-- ══ POSITION (below Employee) ═════════════════════════════ -->
+
+<div class="entity" id="e-position" style="left:530px;top:1000px;min-width:240px">
+  <div class="entity-header">Position <span class="badge">PK position_id</span></div>
+  <div class="entity-body">
+    <div class="attr pk"><span class="attr-icon">🔑</span>position_id</div>
+    <div class="attr-divider"></div>
+    <div class="attr"><span class="attr-icon">·</span>position_title · description</div>
+    <div class="attr uf"><span class="attr-icon">↑</span>rank_level [L1–L15]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>interview_organ [COUNCIL/HR_BOARD/MANAGEMENT]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>contract_duration_years</div>
+    <div class="attr-section">BR-EMP-04 · BR-QU-08</div>
+    <div class="attr-eer">Partial: a position may exist without a current holder</div>
+  </div>
+</div>
+
+<!-- ══ EMPLOYEE SUBTYPES (below Employee) ════════════════════
+     x: 380 (academic)   x: 760 (admin)   y: 1200
+════════════════════════════════════════════════════════════ -->
+
+<div class="entity subtype" id="e-academic" style="left:360px;top:1220px;min-width:255px">
+  <div class="entity-header">AcademicEmployee <span class="eer-tag">SUBTYPE ①</span></div>
+  <div class="entity-body">
+    <div class="attr inh"><span class="attr-icon">↓</span>Inherits all Employee attributes</div>
+    <div class="attr-divider"></div>
+    <div class="attr"><span class="attr-icon">·</span>employee_rank [PROF/ASSOC_PROF/SR_LECTURER/LECTURER/ASST_LECTURER/TUTORIAL_ASST]</div>
+    <div class="attr"><span class="attr-icon">·</span>publications_count</div>
+    <div class="attr"><span class="attr-icon">·</span>years_teaching_experience</div>
+    <div class="attr"><span class="attr-icon">·</span>sabbatical_eligible (BOOL)</div>
+    <div class="attr"><span class="attr-icon">·</span>post_retirement_contract (BOOL)</div>
+    <div class="attr-eer">Post-retirement contract allowed to age 75 [BR-SEP-04]<br>Only subtype eligible for SabbaticalLeave</div>
+    <div class="attr-section">BR-QU-01..07: min qualifications per rank</div>
+  </div>
+</div>
+
+<div class="entity subtype" id="e-admin" style="left:750px;top:1220px;min-width:255px">
+  <div class="entity-header">AdministrativeEmployee <span class="eer-tag">SUBTYPE ①</span></div>
+  <div class="entity-body">
+    <div class="attr inh"><span class="attr-icon">↓</span>Inherits all Employee attributes</div>
+    <div class="attr-divider"></div>
+    <div class="attr"><span class="attr-icon">·</span>job_grade</div>
+    <div class="attr"><span class="attr-icon">·</span>admin_unit</div>
+    <div class="attr"><span class="attr-icon">·</span>performance_category</div>
+    <div class="attr-eer">Cannot hold admin roles post-retirement [BR-SEP-05]<br>Mandatory retirement at age 65, no extension</div>
+    <div class="attr-section">BR-EMP-05: retire at 65 only</div>
+  </div>
+</div>
+
+<!-- ══ HR RECORDS (right of Employee) ════════════════════════
+     x: 1060  stacked vertically
+════════════════════════════════════════════════════════════ -->
+
+<div class="entity" id="e-qual" style="left:1060px;top:90px;min-width:245px">
+  <div class="entity-header">Qualifications <span class="badge">PK qualification_id</span></div>
+  <div class="entity-body">
+    <div class="attr pk"><span class="attr-icon">🔑</span>qualification_id</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>employee_id (FK)</div>
+    <div class="attr-divider"></div>
+    <div class="attr"><span class="attr-icon">·</span>qualification_level · field_of_study</div>
+    <div class="attr"><span class="attr-icon">·</span>institution_name · graduation_year</div>
+    <div class="attr"><span class="attr-icon">·</span>certificate_number [NOT NULL, UNIQUE]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>publications_count</div>
+    <div class="attr nf"><span class="attr-icon">★</span>years_teaching_experience</div>
+    <div class="attr-section">BR-QU-01..07 · BR-QU-07: cert NOT NULL</div>
+    <div class="attr-eer">Total from Employee (must have ≥1 qualification)</div>
+  </div>
+</div>
+
+<div class="entity" id="e-financial" style="left:1060px;top:430px;min-width:245px">
+  <div class="entity-header">FinancialData <span class="badge">PK financial_id</span></div>
+  <div class="entity-body">
+    <div class="attr pk"><span class="attr-icon">🔑</span>financial_id</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>employee_id (FK, UNIQUE)</div>
+    <div class="attr-divider"></div>
+    <div class="attr"><span class="attr-icon">·</span>bank_name · bank_branch · account_number</div>
+    <div class="attr"><span class="attr-icon">·</span>nssf_number · salary</div>
+    <div class="attr nf"><span class="attr-icon">★</span>nssf_employer_rate [10% fixed — BR-FD-02]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>nssf_employee_rate [5% fixed — BR-FD-02]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>council_approval_logged (BOOL)</div>
+    <div class="attr-section">BR-FD-01: 1:1 mandatory · BR-FD-02: NSSF · BR-FD-04: Council</div>
+    <div class="attr-eer">Total both sides (1:1 mandatory for every employee)</div>
+  </div>
+</div>
+
+<div class="entity" id="e-probation" style="left:1060px;top:760px;min-width:245px">
+  <div class="entity-header">Probation <span class="badge">PK probation_id</span></div>
+  <div class="entity-body">
+    <div class="attr pk"><span class="attr-icon">🔑</span>probation_id</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>employee_id (FK, UNIQUE)</div>
+    <div class="attr-divider"></div>
+    <div class="attr"><span class="attr-icon">·</span>start_date · end_date · extension_count</div>
+    <div class="attr"><span class="attr-icon">·</span>evaluation_score</div>
+    <div class="attr uf"><span class="attr-icon">↑</span>probation_status [ACTIVE/PASSED/TERMINATED/EXTENDED]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>notice_days_on_termination</div>
+    <div class="attr-section">BR-PR-01: max 1 active · BR-PR-03: no promotion while ACTIVE</div>
+    <div class="attr-eer">Partial from Employee (not all employees on probation — 0..1)</div>
+  </div>
+</div>
+
+<!-- ══ PERFORMANCE EVALUATION ════════════════════════════════
+     x: 1060   y: 1050  (below Probation)
+════════════════════════════════════════════════════════════ -->
+
+<div class="entity" id="e-perf" style="left:1060px;top:1060px;min-width:255px">
+  <div class="entity-header">PerformanceEvaluations <span class="badge">PK evaluation_id</span></div>
+  <div class="entity-body">
+    <div class="attr pk"><span class="attr-icon">🔑</span>evaluation_id</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>employee_id (FK)</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>evaluator_id (FK → Employee.supervisor_id)</div>
+    <div class="attr-divider"></div>
+    <div class="attr nf"><span class="attr-icon">★</span>evaluation_period [MID_YEAR / END_OF_YEAR]</div>
+    <div class="attr"><span class="attr-icon">·</span>evaluation_date</div>
+    <div class="attr"><span class="attr-icon">·</span>execution_of_duties_score · innovation_score</div>
+    <div class="attr"><span class="attr-icon">·</span>teamwork_score · service_delivery_score</div>
+    <div class="attr"><span class="attr-icon">·</span>christian_values_score [NOT NULL — BR-PE-08]</div>
+    <div class="attr"><span class="attr-icon">·</span>total_score · evaluation_result</div>
+    <div class="attr nf"><span class="attr-icon">★</span>kra_form_completed (BOOL)</div>
+    <div class="attr nf"><span class="attr-icon">★</span>submitted_by_deadline (BOOL) [30 Nov]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>appeal_lodged (BOOL) · appeal_date</div>
+    <div class="attr-section">BR-PE-01: 2×/yr · BR-PE-03: evaluator=supervisor · BR-PE-07: 10-day appeal</div>
+    <div class="attr-eer">Total from Employee (every active employee must be evaluated)</div>
+  </div>
+</div>
+
+<!-- ══ LEAVE SUPERTYPE ════════════════════════════════════════
+     x: 1600   y: 360
+════════════════════════════════════════════════════════════ -->
+
+<div class="entity supertype" id="e-leave" style="left:1600px;top:300px;min-width:265px">
+  <div class="entity-header">Leave <span class="badge">PK leave_id</span><span class="eer-tag">SUPERTYPE ②</span></div>
+  <div class="entity-body">
+    <div class="attr pk"><span class="attr-icon">🔑</span>leave_id</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>employee_id (FK)</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>approved_by (FK → Employee.supervisor_id)</div>
+    <div class="attr-divider"></div>
+    <div class="attr uf"><span class="attr-icon">↑</span>leave_type [ANNUAL/SICK/COMPASSIONATE/MATERNITY/PATERNITY/SABBATICAL]</div>
+    <div class="attr"><span class="attr-icon">·</span>start_date · end_date · reason</div>
+    <div class="attr uf"><span class="attr-icon">↑</span>status [PENDING/APPROVED/REJECTED/CANCELLED]</div>
+    <div class="attr"><span class="attr-icon">·</span>request_date · days_used</div>
+    <div class="attr nf"><span class="attr-icon">★</span>medical_clearance_required (BOOL)</div>
+    <div class="attr-eer">② Disjoint, Total: {AnnualLeave, SickLeave, MaternityLeave, SabbaticalLeave, …}</div>
+    <div class="attr-section">BR-LV-01..10</div>
+  </div>
+</div>
+
+<!-- ══ LEAVE SUBTYPES (below Leave, spread horizontally) ═════
+     y: 740
+════════════════════════════════════════════════════════════ -->
+
+<div class="entity subtype" id="e-annual-leave" style="left:1410px;top:740px;min-width:200px">
+  <div class="entity-header">AnnualLeave <span class="eer-tag">SUBTYPE ②</span></div>
+  <div class="entity-body">
+    <div class="attr inh"><span class="attr-icon">↓</span>Inherits Leave attributes</div>
+    <div class="attr-divider"></div>
+    <div class="attr"><span class="attr-icon">·</span>days_entitlement [22 working days]</div>
+    <div class="attr"><span class="attr-icon">·</span>carry_over_days [forfeited yr-end]</div>
+    <div class="attr-eer">Forfeited unused days at Dec 31 [BR-LV-03]</div>
+  </div>
+</div>
+
+<div class="entity subtype" id="e-sick-leave" style="left:1630px;top:740px;min-width:200px">
+  <div class="entity-header">SickLeave <span class="eer-tag">SUBTYPE ②</span></div>
+  <div class="entity-body">
+    <div class="attr inh"><span class="attr-icon">↓</span>Inherits Leave attributes</div>
+    <div class="attr-divider"></div>
+    <div class="attr"><span class="attr-icon">·</span>full_pay_months [max 6]</div>
+    <div class="attr"><span class="attr-icon">·</span>half_pay_months [max 3]</div>
+    <div class="attr"><span class="attr-icon">·</span>medical_certificate_ref</div>
+    <div class="attr-eer">5+ days requires AGHC clearance [BR-LV-05]</div>
+  </div>
+</div>
+
+<div class="entity subtype" id="e-maternity-leave" style="left:1850px;top:740px;min-width:205px">
+  <div class="entity-header">MaternityLeave <span class="eer-tag">SUBTYPE ②</span></div>
+  <div class="entity-body">
+    <div class="attr inh"><span class="attr-icon">↓</span>Inherits Leave attributes</div>
+    <div class="attr-divider"></div>
+    <div class="attr"><span class="attr-icon">·</span>expected_delivery_date</div>
+    <div class="attr nf"><span class="attr-icon">★</span>handover_submitted (BOOL)</div>
+    <div class="attr-eer">Handover required 1 month before [BR-LV-07]</div>
+  </div>
+</div>
+
+<div class="entity subtype" id="e-sabbatical-leave" style="left:2075px;top:740px;min-width:215px">
+  <div class="entity-header">SabbaticalLeave <span class="eer-tag">SUBTYPE ②</span></div>
+  <div class="entity-body">
+    <div class="attr inh"><span class="attr-icon">↓</span>Inherits Leave attributes</div>
+    <div class="attr-divider"></div>
+    <div class="attr"><span class="attr-icon">·</span>years_service_at_request</div>
+    <div class="attr nf"><span class="attr-icon">★</span>council_approved (BOOL)</div>
+    <div class="attr-eer">Requires ≥6 yrs service [BR-LV-09]<br>AcademicEmployee only</div>
+  </div>
+</div>
+
+<!-- ══ SEPARATION SUPERTYPE ══════════════════════════════════
+     x: 1600   y: 1100
+════════════════════════════════════════════════════════════ -->
+
+<div class="entity supertype" id="e-separation" style="left:1600px;top:1100px;min-width:270px">
+  <div class="entity-header">SeparationRecord <span class="badge">PK separation_id</span><span class="eer-tag">SUPERTYPE ③</span></div>
+  <div class="entity-body">
+    <div class="attr pk"><span class="attr-icon">🔑</span>separation_id</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>employee_id (FK)</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>processed_by (FK → Employee)</div>
+    <div class="attr-divider"></div>
+    <div class="attr nf"><span class="attr-icon">★</span>separation_type [RESIGNATION / NON_RENEWAL / TERMINATION / RETIREMENT / RESTRUCTURING / DISMISSAL / SUMMARY_DISMISSAL / ABSCONDMENT / NATURAL_CAUSES / REDUNDANCY / FORCE_MAJEURE / CONTRACT_BUYOUT]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>notice_period_days [computed by tenure — BR-SEP-01]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>effective_date</div>
+    <div class="attr nf"><span class="attr-icon">★</span>exit_clearance_complete (BOOL)</div>
+    <div class="attr nf"><span class="attr-icon">★</span>certificate_of_service_issued (BOOL)</div>
+    <div class="attr nf"><span class="attr-icon">★</span>severance_pay_amount [1 month / year service]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>tribunal_approved (BOOL) · hrb_approved (BOOL)</div>
+    <div class="attr-eer">③ Disjoint, Total: {VoluntarySeparation, InvoluntarySeparation}</div>
+    <div class="attr-section">BR-SEP-01 · BR-SEP-06 · BR-SEP-07 · BR-SEP-08</div>
+  </div>
+</div>
+
+<!-- ══ SEPARATION SUBTYPES ════════════════════════════════════
+     y: 1560
+════════════════════════════════════════════════════════════ -->
+
+<div class="entity subtype" id="e-voluntary-sep" style="left:1430px;top:1560px;min-width:250px">
+  <div class="entity-header">VoluntarySeparation <span class="eer-tag">SUBTYPE ③</span></div>
+  <div class="entity-body">
+    <div class="attr inh"><span class="attr-icon">↓</span>Inherits SeparationRecord attributes</div>
+    <div class="attr-divider"></div>
+    <div class="attr nf"><span class="attr-icon">★</span>types: RESIGNATION / NON_RENEWAL / CONTRACT_BUYOUT / NATURAL_CAUSES</div>
+    <div class="attr nf"><span class="attr-icon">★</span>resignation_blocked (BOOL)</div>
+    <div class="attr nf"><span class="attr-icon">★</span>notice_letter_received_date</div>
+    <div class="attr-eer">Resignation blocked if under investigation [BR-SEP-02]</div>
+  </div>
+</div>
+
+<div class="entity subtype" id="e-involuntary-sep" style="left:1820px;top:1560px;min-width:255px">
+  <div class="entity-header">InvoluntarySeparation <span class="eer-tag">SUBTYPE ③</span></div>
+  <div class="entity-body">
+    <div class="attr inh"><span class="attr-icon">↓</span>Inherits SeparationRecord attributes</div>
+    <div class="attr-divider"></div>
+    <div class="attr nf"><span class="attr-icon">★</span>types: DISMISSAL / SUMMARY_DISMISSAL / ABSCONDMENT / REDUNDANCY / RESTRUCTURING / FORCE_MAJEURE / RETIREMENT</div>
+    <div class="attr nf"><span class="attr-icon">★</span>dual_approval_required (BOOL)</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>disciplinary_record_id (FK → DisciplinaryRecord)</div>
+    <div class="attr-eer">Dismissal: Tribunal + HRB approval [BR-SEP-08]<br>Abscondment after 5 working days [BR-SEP-03]</div>
+  </div>
+</div>
+
+<!-- ══ DISCIPLINARY RECORD ════════════════════════════════════
+     x: 1600   y: 2000
+════════════════════════════════════════════════════════════ -->
+
+<div class="entity" id="e-discipline" style="left:1600px;top:1980px;min-width:270px">
+  <div class="entity-header">DisciplinaryRecord <span class="badge">PK disciplinary_id</span></div>
+  <div class="entity-body">
+    <div class="attr pk"><span class="attr-icon">🔑</span>disciplinary_id</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>employee_id (FK)</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>issued_by (FK → Employee)</div>
+    <div class="attr-divider"></div>
+    <div class="attr nf"><span class="attr-icon">★</span>category [MINOR / SERIOUS / GROSS]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>offence_description</div>
+    <div class="attr nf"><span class="attr-icon">★</span>sanction_issued [VERBAL_WARNING / 1ST_WRITTEN / 2ND_WRITTEN / FINAL_WRITTEN / SUSPENSION / DISMISSAL]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>date_issued</div>
+    <div class="attr nf"><span class="attr-icon">★</span>valid_until [issued + 24 months — BR-DC-02]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>appeal_lodged (BOOL) · appeal_deadline</div>
+    <div class="attr nf"><span class="attr-icon">★</span>criminal_proceedings_ongoing (BOOL)</div>
+    <div class="attr nf"><span class="attr-icon">★</span>interdiction_pay_rate [0.5 if interdicted]</div>
+    <div class="attr-section">BR-DC-01..06</div>
+    <div class="attr-eer">GROSS category triggers InvoluntarySeparation [BR-DC-03]</div>
+  </div>
+</div>
+
+<!-- ══ TRAINING & DEVELOPMENT ════════════════════════════════
+     x: 2180   y: 1980
+════════════════════════════════════════════════════════════ -->
+
+<div class="entity" id="e-training" style="left:2180px;top:1980px;min-width:270px">
+  <div class="entity-header">TrainingAndDevelopment <span class="badge">PK development_id</span></div>
+  <div class="entity-body">
+    <div class="attr pk"><span class="attr-icon">🔑</span>development_id</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>employee_id (FK)</div>
+    <div class="attr fk"><span class="attr-icon">🔗</span>approved_by (FK → Employee)</div>
+    <div class="attr-divider"></div>
+    <div class="attr nf"><span class="attr-icon">★</span>development_type [LONG_STUDY / SHORT_COURSE / ROTATION / ACTING / SABBATICAL / MENTORSHIP / SECONDMENT / CONFERENCE]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>institution · start_date · end_date</div>
+    <div class="attr nf"><span class="attr-icon">★</span>bonding_required (BOOL)</div>
+    <div class="attr nf"><span class="attr-icon">★</span>bonding_period_months [&gt;3 months triggers bond]</div>
+    <div class="attr nf"><span class="attr-icon">★</span>bonding_end_date</div>
+    <div class="attr-section">Sec. 8: rotation every 2–3 yrs · acting max 1 yr · bonding</div>
+    <div class="attr-eer">Partial from Employee (not all on training at any time)</div>
+  </div>
+</div>
+
+</div><!-- #canvas -->
+</div><!-- #canvas-wrap -->
+
+<script>
+const svg = document.getElementById('lines');
+const ns  = 'http://www.w3.org/2000/svg';
+const defs = document.createElementNS(ns,'defs');
+svg.appendChild(defs);
+
+// ── Line colour (all uniform) ────────────────────────────────
+const LC  = '#3a4258';   // regular relationship line colour
+const EER = '#5b8fff';   // EER / specialization colour
+const RFK = '#7055cc';   // role-FK dashed colour
+const TRG = '#cc5577';   // trigger colour
+
+let aC = 0;
+function mkArrow(color) {
+  const id = 'arr' + (aC++);
+  const m = document.createElementNS(ns,'marker');
+  m.setAttribute('id',id); m.setAttribute('markerWidth','7'); m.setAttribute('markerHeight','5');
+  m.setAttribute('refX','6'); m.setAttribute('refY','2.5'); m.setAttribute('orient','auto');
+  const p = document.createElementNS(ns,'polygon');
+  p.setAttribute('points','0 0,7 2.5,0 5'); p.setAttribute('fill',color);
+  m.appendChild(p); defs.appendChild(m); return id;
+}
+
+function R(id) {
+  const el = document.getElementById(id); if(!el) return null;
+  const l = parseInt(el.style.left), t = parseInt(el.style.top);
+  return { l, t, r:l+el.offsetWidth, b:t+el.offsetHeight,
+           cx:l+el.offsetWidth/2, cy:t+el.offsetHeight/2,
+           w:el.offsetWidth, h:el.offsetHeight };
+}
+
+// ── Core drawing helpers ────────────────────────────────────
+
+// Cubic-bezier path between two points
+function cubicD(x1,y1,x2,y2) {
+  const my = (y1+y2)/2;
+  return `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`;
+}
+
+// Draw a single path
+function path(d, stroke, dash, sw) {
+  const p = document.createElementNS(ns,'path');
+  p.setAttribute('d',d); p.setAttribute('fill','none');
+  p.setAttribute('stroke',stroke); p.setAttribute('stroke-width', sw||'1.5');
+  if(dash) p.setAttribute('stroke-dasharray',dash);
+  svg.appendChild(p); return p;
+}
+
+// SVG text label
+function label(x,y,txt,fill,anchor,cls) {
+  const t = document.createElementNS(ns,'text');
+  t.setAttribute('x',x); t.setAttribute('y',y);
+  t.setAttribute('text-anchor',anchor||'middle');
+  t.setAttribute('class',cls||'rel-label');
+  if(fill) t.setAttribute('fill',fill);
+  t.textContent = txt; svg.appendChild(t); return t;
+}
+
+// Cardinality labels
+function cards(x1,y1,x2,y2,c1,c2,color) {
+  if(c1) {
+    const t=document.createElementNS(ns,'text');
+    t.setAttribute('x',x1+10); t.setAttribute('y',y1+16);
+    t.setAttribute('text-anchor','middle'); t.setAttribute('class','card-text');
+    t.setAttribute('fill',color||LC); t.textContent=c1; svg.appendChild(t);
+  }
+  if(c2) {
+    const t=document.createElementNS(ns,'text');
+    t.setAttribute('x',x2+10); t.setAttribute('y',y2-6);
+    t.setAttribute('text-anchor','middle'); t.setAttribute('class','card-text');
+    t.setAttribute('fill',color||LC); t.textContent=c2; svg.appendChild(t);
+  }
+}
+
+// ── PARTICIPATION LINE DRAWING ───────────────────────────────
+// total = true  → draw two parallel lines (spaced 4px apart)
+// total = false → draw one line
+
+function connLine(x1,y1,x2,y2,total,relLabel,c1,c2) {
+  const d = cubicD(x1,y1,x2,y2);
+  if(total) {
+    // perpendicular offset direction
+    const dx = x2-x1, dy = y2-y1;
+    const len = Math.sqrt(dx*dx+dy*dy)||1;
+    const ox = (-(dy/len))*3, oy = ((dx/len))*3;
+    path(`M${x1+ox},${y1+oy} C${x1+ox},${(y1+y2)/2} ${x2+ox},${(y1+y2)/2} ${x2+ox},${y2+oy}`, LC, null, '1.5');
+    path(`M${x1-ox},${y1-oy} C${x1-ox},${(y1+y2)/2} ${x2-ox},${(y1+y2)/2} ${x2-ox},${y2-oy}`, LC, null, '1.5');
+  } else {
+    path(d, LC, null, '1.5');
+  }
+  if(relLabel) label((x1+x2)/2,(y1+y2)/2-9,relLabel,null,'middle');
+  if(c1||c2) cards(x1,y1,x2,y2,c1,c2);
+}
+
+// Dashed role-FK line
+function dashLine(x1,y1,x2,y2,lbl) {
+  path(cubicD(x1,y1,x2,y2), RFK, '6 3', '1.2');
+  if(lbl) label((x1+x2)/2,(y1+y2)/2-8,lbl,'#5040aa','middle');
+}
+
+// Self-loop (unary recursive)
+function selfLoop(id, la, lb) {
+  const r = R(id); if(!r) return;
+  const lx = r.l-90, sy = r.cy-26, ey = r.cy+26;
+  path(`M${r.l},${sy} C${lx},${sy} ${lx},${ey} ${r.l},${ey}`, TRG, '5 3', '2');
+  const mid = mkArrow(TRG);
+  const ap = document.createElementNS(ns,'path');
+  ap.setAttribute('d',`M${lx+14},${ey-2} L${r.l+1},${ey}`);
+  ap.setAttribute('fill','none'); ap.setAttribute('stroke',TRG); ap.setAttribute('stroke-width','1.5');
+  ap.setAttribute('marker-end',`url(#${mid})`); svg.appendChild(ap);
+  if(la) label(lx-8,(sy+ey)/2,la,TRG,'end');
+  if(lb) label(lx-8,(sy+ey)/2+14,lb,TRG,'end');
+}
+
+// ── EER SPECIALIZATION CIRCLE ───────────────────────────────
+// Draws: supertype → circle → subtypes
+// All lines are EER colour; circle shows constraint letter
+
+function drawSpecCircle(supId, subIds, constraint, cx, cy, lineColor) {
+  const sup = R(supId); if(!sup) return;
+  const col = lineColor || EER;
+  const r = 16;
+
+  // line from supertype bottom to circle
+  path(`M${sup.cx},${sup.b} L${cx},${cy-r}`, col, null, '2');
+
+  // circle
+  const circ = document.createElementNS(ns,'circle');
+  circ.setAttribute('cx',cx); circ.setAttribute('cy',cy); circ.setAttribute('r',r);
+  circ.setAttribute('fill','#080a0f'); circ.setAttribute('stroke',col); circ.setAttribute('stroke-width','2');
+  svg.appendChild(circ);
+
+  // constraint letter
+  const ct = document.createElementNS(ns,'text');
+  ct.setAttribute('x',cx); ct.setAttribute('y',cy+4);
+  ct.setAttribute('text-anchor','middle'); ct.setAttribute('class','eer-circ-lbl');
+  ct.setAttribute('fill',col); ct.textContent=constraint; svg.appendChild(ct);
+
+  // lines from circle to each subtype
+  subIds.forEach(sid => {
+    const sub = R(sid); if(!sub) return;
+    path(`M${cx},${cy+r} C${cx},${sub.t} ${sub.cx},${sub.t} ${sub.cx},${sub.t}`, col, null, '1.5');
+  });
+}
+
+// ── DRAW ALL RELATIONSHIPS ───────────────────────────────────
+
+window.addEventListener('load', () => {
+
+  const div = R('e-division'), fac = R('e-faculty'), dep = R('e-dept');
+  const emp = R('e-employee'), bio = R('e-biodata'), pos = R('e-position');
+  const qual = R('e-qual'), fin = R('e-financial'), prob = R('e-probation'), perf = R('e-perf');
+  const lv = R('e-leave'), sep = R('e-separation'), disc = R('e-discipline'), train = R('e-training');
+  const acad = R('e-academic'), adm = R('e-admin');
+  const annL = R('e-annual-leave'), sickL = R('e-sick-leave');
+  const matL = R('e-maternity-leave'), sabL = R('e-sabbatical-leave');
+  const volS = R('e-voluntary-sep'), invS = R('e-involuntary-sep');
+
+  // ── ORG HIERARCHY ───────────────────────────────────────────
+  // Division → Faculty: total (every division has faculties)
+  connLine(div.cx, div.b, fac.cx, fac.t, true, '1 : M', '1', 'M');
+  // Faculty → Dept: total
+  connLine(fac.cx, fac.b, dep.cx, dep.t, true, '1 : M', '1', 'M');
+  // Dept → Employee: total (every employee in a dept, every dept has employees)
+  connLine(dep.r, dep.cy, emp.l, emp.cy-20, true, '1 : M', '1', 'M');
+
+  // ── BIODATA 1:1 total both sides ────────────────────────────
+  connLine(bio.cx, bio.b, emp.cx, emp.t, true, '1 : 1', '1', '1');
+
+  // ── POSITION (partial: position may exist without holder) ───
+  connLine(emp.cx, emp.b, pos.cx, pos.t, false, 'M : 1', 'M', '1');
+
+  // ── UNARY RECURSIVE supervisor_id ──────────────────────────
+  selfLoop('e-employee', 'supervises (1:M)', '◀ Unary EER ④ [BR-EMP-07]');
+
+  // ── EMPLOYEE → QUALIFICATIONS: total from employee ─────────
+  connLine(emp.r, emp.cy-50, qual.l, qual.cy, true, '1 : M (≥1)', '1', 'M');
+
+  // ── EMPLOYEE → FINANCIAL: total both ────────────────────────
+  connLine(emp.r, emp.cy, fin.l, fin.cy, true, '1 : 1', '1', '1');
+
+  // ── EMPLOYEE → PROBATION: partial ───────────────────────────
+  connLine(emp.r, emp.cy+50, prob.l, prob.cy, false, '1 : 0..1', '1', '0..1');
+
+  // ── EMPLOYEE → PERFORMANCE: total from employee ─────────────
+  connLine(emp.r, emp.b-20, perf.l, perf.cy, true, '1 : M', '1', 'M');
+  dashLine(emp.r, emp.cy+30, perf.l, perf.cy+50, 'evaluator = supervisor [BR-PE-03]');
+
+  // ── EMPLOYEE → LEAVE: partial (employees may or may not have leave) 
+  connLine(emp.r, emp.cy-20, lv.l, lv.cy, false, '1 : M', '1', 'M');
+  dashLine(emp.r, emp.cy-10, lv.l, lv.cy+55, 'approved_by [BR-LV-10]');
+
+  // ── EMPLOYEE → SEPARATION: partial (0..1) ───────────────────
+  connLine(emp.r, emp.cy+20, sep.l, sep.cy, false, '1 : 0..1', '1', '0..1');
+  dashLine(emp.r, emp.cy+40, sep.l, sep.cy+60, 'processed_by');
+
+  // ── EMPLOYEE → DISCIPLINE: partial ──────────────────────────
+  connLine(emp.cx+20, emp.b, disc.cx, disc.t, false, '1 : M', '1', 'M');
+  dashLine(emp.cx+30, emp.b, disc.l, disc.cy, 'issued_by');
+
+  // ── EMPLOYEE → TRAINING: partial ────────────────────────────
+  connLine(emp.cx-20, emp.b, train.cx, train.t, false, '1 : M', '1', 'M');
+  dashLine(emp.cx-30, emp.b, train.l, train.cy, 'approved_by');
+
+  // ── DISCIPLINE → INVOLUNTARY SEPARATION trigger ─────────────
+  path(cubicD(disc.r, disc.cy, invS.l, invS.cy), TRG, '5 3', '1.5');
+  label((disc.r+invS.l)/2, (disc.cy+invS.cy)/2-8, 'GROSS → DISMISSAL [BR-DC-03]', TRG, 'middle');
+
+  // ── SABBATICAL → ACADEMIC constraint ────────────────────────
+  if(sabL && acad) {
+    path(`M${sabL.cx},${sabL.b} C${sabL.cx},${acad.t} ${acad.cx},${acad.t} ${acad.cx},${acad.t}`, EER, '4 4', '1');
+    label(sabL.cx+10, sabL.b+18, 'AcademicEmployee only [BR-LV-09]', '#4466aa', 'start');
+  }
+
+  // ══ EER SPECIALIZATION CIRCLES ════════════════════════════
+
+  // ① Employee → AcademicEmployee, AdministrativeEmployee
+  // Circle sits between Employee bottom and the two subtypes
+  const empMidX = (acad.cx + adm.cx) / 2;
+  const empCircY = emp.b + 90;
+  drawSpecCircle('e-employee', ['e-academic','e-admin'], 'd', empMidX, empCircY, EER);
+
+  // ② Leave → 4 subtypes
+  const lvMidX = (annL.cx + sabL.cx) / 2;
+  const lvCircY = lv.b + 60;
+  drawSpecCircle('e-leave', ['e-annual-leave','e-sick-leave','e-maternity-leave','e-sabbatical-leave'], 'd', lvMidX, lvCircY, EER);
+
+  // ③ SeparationRecord → Voluntary, Involuntary
+  const sepMidX = (volS.cx + invS.cx) / 2;
+  const sepCircY = sep.b + 60;
+  drawSpecCircle('e-separation', ['e-voluntary-sep','e-involuntary-sep'], 'd', sepMidX, sepCircY, EER);
+
+  // Constraint labels near circles
+  label(empMidX+22, empCircY-20, 'disjoint, total', EER, 'start');
+  label(lvMidX+22,  lvCircY-20,  'disjoint, total', EER, 'start');
+  label(sepMidX+22, sepCircY-20, 'disjoint, total', EER, 'start');
+});
+
+// ── Drag to pan ─────────────────────────────────────────────
+const wrap = document.getElementById('canvas-wrap');
+let drag=false, sx, sy, sl, st;
+wrap.addEventListener('mousedown', e=>{ drag=true; sx=e.clientX; sy=e.clientY; sl=wrap.scrollLeft; st=wrap.scrollTop; });
+window.addEventListener('mousemove', e=>{ if(!drag) return; wrap.scrollLeft=sl-(e.clientX-sx); wrap.scrollTop=st-(e.clientY-sy); });
+window.addEventListener('mouseup', ()=>drag=false);
+
+// ── Tooltips ─────────────────────────────────────────────────
+const tips = {
+  'e-division':      {title:'Division',         eer:'', body:'Top of org hierarchy. Exactly 3 divisions (VC, Academic Affairs, Finance & Administration). Faculties have total participation — every division must contain at least one faculty.', rules:'BR-ORG-04: 3 divisions via ENUM / CHECK'},
+  'e-faculty':       {title:'Faculty',           eer:'', body:'Total participation in Division (FK NOT NULL). Types: Faculty, School, Institute, Directorate.', rules:'BR-ORG-01: FK division_id NOT NULL'},
+  'e-dept':          {title:'Department',        eer:'', body:'Total participation in Faculty (FK NOT NULL). Every employee must belong to a department.', rules:'BR-ORG-02: FK faculty_id NOT NULL · BR-ORG-03'},
+  'e-employee':      {title:'Employee — SUPERTYPE ①', eer:'Disjoint, Total specialization into AcademicEmployee and AdministrativeEmployee. Every employee is exactly one subtype. Unary recursive supervisor_id is the EER self-referencing relationship.', body:'Central entity. Total participation with BioData, FinancialData, PerformanceEvaluations. Partial with Probation, SeparationRecord, DisciplinaryRecord, TrainingAndDevelopment.', rules:'BR-EMP-04 contract by level · BR-EMP-05 retirement · BR-EMP-07 unary supervisor · BR-EMP-09 christian commitment'},
+  'e-academic':      {title:'AcademicEmployee — SUBTYPE ①', eer:'Inherits ALL Employee attributes. Disjoint with AdministrativeEmployee.', body:'Holds employee_rank, publications_count, years_teaching_experience. May hold post-retirement contract to age 75. Only subtype eligible for SabbaticalLeave.', rules:'BR-QU-01..07 qualifications · BR-EMP-05 age 75 · BR-SEP-04'},
+  'e-admin':         {title:'AdministrativeEmployee — SUBTYPE ①', eer:'Inherits ALL Employee attributes. Disjoint with AcademicEmployee.', body:'Holds job_grade, admin_unit. Cannot hold admin roles post-retirement. Mandatory retirement at 65.', rules:'BR-EMP-05: retire at 65 only · BR-SEP-05'},
+  'e-biodata':       {title:'BioData',           eer:'Total participation BOTH sides — 1:1 mandatory.', body:'Personal, contact, and next-of-kin information. disability_flag is recorded but cannot affect hiring decisions.', rules:'BR-EMP-10: disability not a bar · BR-EMP-11: nepotism disclosure'},
+  'e-position':      {title:'Position',          eer:'Partial participation — a position may exist without a current holder (vacancy).', body:'Holds rank_level L1–L15, interview_organ, contract_duration_years. Drives contract length and approval chain.', rules:'BR-EMP-04 · BR-QU-08'},
+  'e-qual':          {title:'Qualifications',    eer:'Total from Employee (must have ≥1). Partial from Qualification side.', body:'1:M. certificate_number NOT NULL and UNIQUE. publications_count and years_teaching_experience validate academic rank requirements.', rules:'BR-QU-01..07 · BR-QU-07: cert NOT NULL UNIQUE'},
+  'e-financial':     {title:'FinancialData',     eer:'Total both sides — 1:1 mandatory for every employee.', body:'Bank details, NSSF, salary. NSSF rates fixed at 10% employer / 5% employee. Salary changes require Council approval.', rules:'BR-FD-01: 1:1 · BR-FD-02: NSSF · BR-FD-04: Council approval'},
+  'e-probation':     {title:'Probation',         eer:'Partial from Employee — 0..1, not all employees are on probation.', body:'Optional record. Status ENUM: ACTIVE / PASSED / TERMINATED / EXTENDED. Promotion blocked while ACTIVE.', rules:'BR-PR-01: UNIQUE WHERE ACTIVE · BR-PR-02: 14-day notice · BR-PR-03: no promotion'},
+  'e-leave':         {title:'Leave — SUPERTYPE ②', eer:'Disjoint, Total specialization. Every leave record is exactly one of the 6 leave types.', body:'Total participation from Employee. approved_by must equal employee supervisor_id. 6-type ENUM enforced.', rules:'BR-LV-01..10'},
+  'e-annual-leave':  {title:'AnnualLeave — SUBTYPE ②',   eer:'Inherits Leave attributes.', body:'22 working days entitlement. Unused days forfeited at December 31 — no carry-over.', rules:'BR-LV-02: 22 days · BR-LV-03: forfeited yr-end'},
+  'e-sick-leave':    {title:'SickLeave — SUBTYPE ②',     eer:'Inherits Leave attributes.', body:'6 months full pay then 3 months half pay. 5+ consecutive days requires AGHC medical clearance.', rules:'BR-LV-04: 6mo full + 3mo half · BR-LV-05: AGHC clearance'},
+  'e-maternity-leave':{title:'MaternityLeave — SUBTYPE ②',eer:'Inherits Leave attributes.', body:'Handover document must be submitted at least 1 month before expected delivery date.', rules:'BR-LV-07: handover 1 month before'},
+  'e-sabbatical-leave':{title:'SabbaticalLeave — SUBTYPE ②',eer:'Inherits Leave attributes. Restricted to AcademicEmployee subtype only.', body:'Requires ≥6 years of service. Must be approved by University Council.', rules:'BR-LV-09: 6 years service · Council approval · AcademicEmployee only'},
+  'e-perf':          {title:'PerformanceEvaluations', eer:'Total from Employee — every active employee must be evaluated twice yearly.', body:'Mid-year (June/July) + year-end (November). evaluator_id must equal supervisor_id. christian_values_score is NOT NULL.', rules:'BR-PE-01: 2×/yr · BR-PE-02: 30 Nov deadline · BR-PE-03: evaluator=supervisor · BR-PE-08: christian_values NOT NULL'},
+  'e-separation':    {title:'SeparationRecord — SUPERTYPE ③', eer:'Disjoint, Total specialization. Every separation is exactly Voluntary or Involuntary.', body:'12 separation types. notice_period computed from tenure. Exit clearance gates terminal benefits.', rules:'BR-SEP-01..08'},
+  'e-voluntary-sep': {title:'VoluntarySeparation — SUBTYPE ③', eer:'Inherits SeparationRecord. Disjoint with InvoluntarySeparation.', body:'Types: Resignation, Non-Renewal, Contract Buyout, Natural Causes. Resignation blocked if under investigation.', rules:'BR-SEP-02: block resignation under investigation'},
+  'e-involuntary-sep':{title:'InvoluntarySeparation — SUBTYPE ③', eer:'Inherits SeparationRecord. Disjoint with VoluntarySeparation. Links to DisciplinaryRecord.', body:'Types: Dismissal, Summary Dismissal, Abscondment, Redundancy, Restructuring, Force Majeure, Retirement. Dismissal requires Tribunal + HRB dual approval.', rules:'BR-SEP-03: abscondment 5 days · BR-SEP-08: dual approval · BR-DC-03: GROSS → here'},
+  'e-discipline':    {title:'DisciplinaryRecord',    eer:'Partial from Employee.', body:'GROSS misconduct automatically triggers creation of an InvoluntarySeparation record. Sanctions valid 24 months. Half pay during interdiction; refunded if cleared.', rules:'BR-DC-01: 3 categories · BR-DC-02: 24 months · BR-DC-03: GROSS → dismissal · BR-DC-05: 14-day appeal'},
+  'e-training':      {title:'TrainingAndDevelopment', eer:'Partial from Employee.', body:'Covers long study, short courses, job rotation (every 2–3 yrs), acting positions (max 1 yr), mentorship, secondment, conferences. Bonding applies when study > 3 months for full-time employees.', rules:'Sec. 8.1–8.4'},
+};
+
+const tooltip = document.getElementById('tooltip');
+document.querySelectorAll('.entity').forEach(el => {
+  el.addEventListener('mouseenter', () => {
+    const d = tips[el.id]; if(!d) return;
+    const eerTag = d.eer ? `<div class="tt-eer">⬡ EER: ${d.eer}</div>` : '';
+    tooltip.innerHTML = `<div class="tt-title">${d.title}</div>${eerTag}${d.body.replace(/\n/g,'<br>')}<div class="tt-rule">${d.rules.replace(/\n/g,'<br>')}</div>`;
+    tooltip.style.display = 'block';
+  });
+  el.addEventListener('mousemove', e => {
+    tooltip.style.left = (e.clientX+16)+'px';
+    tooltip.style.top  = Math.min(e.clientY-10, window.innerHeight-240)+'px';
+  });
+  el.addEventListener('mouseleave', () => tooltip.style.display='none');
+});
+
+window.addEventListener('load', () => { wrap.scrollLeft=0; wrap.scrollTop=0; });
+</script>
+</body>
+</html>
